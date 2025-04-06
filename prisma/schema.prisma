@@ -1,0 +1,797 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Enum definitions
+enum ItemType {
+  RESOURCE
+  TOOL
+  CONSUMABLE
+  CRAFTED
+}
+
+enum QuestStatus {
+  AVAILABLE
+  ACTIVE
+  COMPLETED
+}
+
+// Add QuestType enum
+enum QuestType {
+  STANDARD
+  DAILY
+  WEEKLY
+  CHAIN
+  SPECIAL
+}
+
+enum TransactionType {
+  WORK_REWARD
+  CRAFT
+  MARKET_SALE
+  MARKET_PURCHASE
+  PLAYER_TRADE
+  NPC_SHOP_BUY
+  NPC_SHOP_SELL
+  QUEST_REWARD
+  ADMIN_ACTION
+  MILESTONE_REWARD
+  SALVAGE // Added for item salvaging
+}
+
+enum RewardType {
+  CURRENCY
+  ITEM
+  ENERGY
+  MAX_ENERGY
+  TITLE
+  BADGE
+  SPECIAL
+}
+
+// Added enum for crafting specializations
+enum CraftingSpecialization {
+  WEAPONSMITH
+  ARMORSMITH
+  ALCHEMY
+  COOKING
+  JEWELCRAFTING
+  TAILORING
+  ENGINEERING
+  WOODWORKING
+}
+
+// Added enum for titles
+enum TitleRarity {
+  COMMON
+  UNCOMMON
+  RARE
+  EPIC
+  LEGENDARY
+}
+
+// Added for skill trees
+enum SkillTreeType {
+  COMBAT
+  CRAFTING
+  GATHERING
+  SOCIAL
+}
+
+// Model definitions
+model User {
+  id            String   @id @default(uuid())
+  discordId     String   @unique
+  username      String
+  level         Int      @default(1)
+  experience    Int      @default(0)
+  currency      Int      @default(0)
+  currentEnergy Int      @default(100)
+  maxEnergy     Int      @default(100)
+  currentZoneId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastActive    DateTime @default(now())  // Added lastActive field
+
+  // Added for prestige system
+  prestigeLevel           Int @default(0)
+  prestigePoints          Int @default(0)
+  totalLifetimeExperience Int @default(0)
+
+  // Added for titles and badges
+  activeTitle String?
+  activeBadge String?
+
+  // Relations
+  inventory               InventorySlot[]
+  userItemInstances       UserItemInstance[]
+  userSkills              UserSkill[]
+  userQuestProgress       UserQuestProgress[]
+  sellingMarketItems      MarketListing[]              @relation("Seller")
+  buyingMarketItems       MarketListing[]              @relation("Buyer")
+  sentTransactions        Transaction[]                @relation("Sender")
+  receivedTransactions    Transaction[]                @relation("Receiver")
+  zone                    Zone?                        @relation(fields: [currentZoneId], references: [id])
+  guild                   GuildMember?
+  milestoneRewards        MilestoneReward[]
+  energyState             UserEnergyState?
+  craftingSpecializations UserCraftingSpecialization[] // Added for crafting specializations
+  discoveredRecipes       UserDiscoveredRecipe[] // Added for recipe discovery
+  userTitles              UserTitle[]
+  userBadges              UserBadge[]
+  skillNodes              UserSkillNode[]
+  equipmentEnhancements   UserEquipmentEnhancement[]
+  prestigePerks           UserPrestigePerk[]
+}
+
+model Item {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  type        ItemType
+  rarity      String
+  baseValue   Int
+  stackable   Boolean  @default(true)
+  tradable    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  inventorySlots      InventorySlot[]
+  userItemInstances   UserItemInstance[]
+  craftingMaterials   CraftingMaterial[]
+  craftingResultItems CraftingRecipe[]   @relation("ResultItem")
+  npcShopItems        NpcShopItem[]
+  marketListings      MarketListing[]
+  jobRequiredItems    Job[]              @relation("RequiredItem")
+  jobRewardItems      JobReward[]        @relation("RewardItem")
+  questObjectiveItems QuestObjective[]   @relation("ObjectiveItem")
+  questRewardItems    QuestReward[]      @relation("RewardItem")
+  toolSpecifications  ToolSpecification?
+
+  // Added for salvaging
+  salvageComponents SalvageComponent[] @relation("ComponentItem")
+  salvageableFrom   SalvageComponent[] @relation("SourceItem")
+
+  // Added for recipe discovery
+  recipeItems         RecipeItem[]
+  EnhancementMaterial EnhancementMaterial[]
+}
+
+model InventorySlot {
+  id        String   @id @default(uuid())
+  userId    String
+  itemId    String
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item Item @relation(fields: [itemId], references: [id])
+
+  @@unique([userId, itemId])
+}
+
+model UserItemInstance {
+  id         String   @id @default(uuid())
+  userId     String
+  itemId     String
+  durability Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  // Relations
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item          Item                      @relation(fields: [itemId], references: [id])
+  marketListing MarketListing?
+  enhancements  UserEquipmentEnhancement?
+}
+
+model ToolSpecification {
+  id              String   @id @default(uuid())
+  itemId          String   @unique
+  efficiencyBonus Float    @default(1.0)
+  maxDurability   Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+
+  // Relations
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  userSkills UserSkill[]
+}
+
+model UserSkill {
+  id         String   @id @default(uuid())
+  userId     String
+  skillId    String
+  level      Int      @default(1)
+  experience Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
+
+  @@unique([userId, skillId])
+}
+
+model Job {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  description    String
+  energyCost     Int
+  xpReward       Int
+  requiredLevel  Int      @default(1)
+  requiredItemId String?
+  zoneId         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+
+  // Relations
+  rewards      JobReward[]
+  requiredItem Item?       @relation("RequiredItem", fields: [requiredItemId], references: [id])
+  zone         Zone?       @relation(fields: [zoneId], references: [id])
+}
+
+model JobReward {
+  id        String   @id @default(uuid())
+  jobId     String
+  itemId    String
+  minAmount Int
+  maxAmount Int
+  chance    Float    @default(1.0) // Between 0 and 1
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  item Item @relation("RewardItem", fields: [itemId], references: [id])
+}
+
+model Zone {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  description   String
+  requiredLevel Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now())
+
+  // Relations
+  users         User[]
+  jobs          Job[]
+  recoveryUsers UserEnergyState[] // Added relation for UserEnergyState
+  Quest         Quest[]
+}
+
+model CraftingRecipe {
+  id              String                  @id @default(uuid())
+  resultItemId    String
+  resultQuantity  Int                     @default(1)
+  requiredLevel   Int                     @default(1)
+  energyCost      Int                     @default(5)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  specialization  CraftingSpecialization? // Added for crafting specializations
+  isDiscoverable  Boolean                 @default(false) // Added for recipe discovery
+  baseSuccessRate Float                   @default(1.0) // Added for critical success (1.0 = 100%)
+  criticalChance  Float                   @default(0.05) // Added for critical success (0.05 = 5%)
+
+  // Relations
+  resultItem      Item                   @relation("ResultItem", fields: [resultItemId], references: [id])
+  materials       CraftingMaterial[]
+  userDiscoveries UserDiscoveredRecipe[] // Added for recipe discovery
+  recipeItem      RecipeItem? // Added for recipe discovery
+}
+
+model CraftingMaterial {
+  id        String   @id @default(uuid())
+  recipeId  String
+  itemId    String
+  quantity  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  recipe CraftingRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  item   Item           @relation(fields: [itemId], references: [id])
+}
+
+model Quest {
+  id              String    @id @default(uuid())
+  name            String    @unique
+  description     String
+  requiredLevel   Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  // New fields for enhanced quest system
+  questType       QuestType @default(STANDARD)
+  expiresAt       DateTime?
+  chainId         String?
+  chainOrder      Int?
+  zoneId          String?
+  minLevel        Int? // For dynamic difficulty scaling
+  maxLevel        Int? // For dynamic difficulty scaling
+  previousQuestId String?   @unique
+  nextQuestId     String?   @unique
+
+  // Relations
+  objectives     QuestObjective[]
+  rewards        QuestReward[]
+  userProgresses UserQuestProgress[]
+  zone           Zone?               @relation(fields: [zoneId], references: [id]) // For location-based quests
+  previousQuest  Quest?              @relation("QuestChain", fields: [previousQuestId], references: [id])
+  nextQuest      Quest?              @relation("QuestChain")
+}
+
+model QuestObjective {
+  id           String   @id @default(uuid())
+  questId      String
+  type         String // GATHER, REACH_LEVEL, PERFORM_JOB, etc.
+  targetItemId String?
+  targetJobId  String?
+  targetAmount Int      @default(1)
+  description  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now())
+
+  // Relations
+  quest      Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  targetItem Item? @relation("ObjectiveItem", fields: [targetItemId], references: [id])
+}
+
+model QuestReward {
+  id         String   @id @default(uuid())
+  questId    String
+  itemId     String?
+  quantity   Int?
+  currency   Int?
+  experience Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now())
+
+  // Relations
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+  item  Item? @relation("RewardItem", fields: [itemId], references: [id])
+}
+
+model UserQuestProgress {
+  id        String      @id @default(uuid())
+  userId    String
+  questId   String
+  status    QuestStatus @default(AVAILABLE)
+  progress  String // JSON string for objective progress
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quest Quest @relation(fields: [questId], references: [id])
+
+  @@unique([userId, questId])
+}
+
+model NpcShop {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  items NpcShopItem[]
+}
+
+model NpcShopItem {
+  id        String   @id @default(uuid())
+  shopId    String
+  itemId    String
+  buyPrice  Int? // Null if not buyable from shop
+  sellPrice Int? // Null if not sellable to shop
+  stock     Int? // Null for unlimited
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  shop NpcShop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  item Item    @relation(fields: [itemId], references: [id])
+}
+
+model MarketListing {
+  id                 String   @id @default(uuid())
+  sellerId           String
+  itemId             String
+  userItemInstanceId String?  @unique
+  quantity           Int
+  price              Int
+  status             String   @default("ACTIVE") // ACTIVE, SOLD, CANCELLED
+  buyerId            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now())
+
+  // Relations
+  seller           User              @relation("Seller", fields: [sellerId], references: [id])
+  buyer            User?             @relation("Buyer", fields: [buyerId], references: [id])
+  item             Item              @relation(fields: [itemId], references: [id])
+  userItemInstance UserItemInstance? @relation(fields: [userItemInstanceId], references: [id])
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  senderId    String
+  receiverId  String
+  type        TransactionType
+  itemId      String?
+  quantity    Int?
+  amount      Int?
+  description String?
+  createdAt   DateTime        @default(now())
+
+  // Relations
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
+}
+
+model Guild {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  members GuildMember[]
+}
+
+model GuildMember {
+  id        String   @id @default(uuid())
+  guildId   String
+  userId    String   @unique
+  role      String   @default("MEMBER") // OWNER, ADMIN, MEMBER
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MilestoneReward {
+  id          String     @id
+  userId      String
+  level       Int
+  rewardType  RewardType
+  amount      Int?
+  itemId      String?
+  titleId     String?
+  badgeId     String?    // Added badgeId field
+  specialId   String?
+  description String
+  claimed     Boolean    @default(false)
+  claimedAt   DateTime?
+  createdAt   DateTime   @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, level])
+  @@index([claimed])
+}
+
+model UserEnergyState {
+  id                     String    @id @default(uuid())
+  userId                 String    @unique
+  currentEnergy          Int
+  maxEnergy              Int
+  lastEnergyUpdate       DateTime  @default(now())
+  regenRateMultiplier    Float     @default(1.0)
+  regenBoostExpiry       DateTime?
+  overflowExpiry         DateTime?
+  currentRecoveryZoneId  String?
+  recoveryZoneEntryTime  DateTime?
+  passiveMaxEnergyBonus  Float     @default(0.0)
+  passiveEfficiencyBonus Float     @default(0.0)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  // Relations
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone Zone? @relation(fields: [currentRecoveryZoneId], references: [id])
+
+  @@index([overflowExpiry])
+  @@index([regenBoostExpiry])
+}
+
+// Added for crafting specializations
+model UserCraftingSpecialization {
+  id             String                 @id @default(uuid())
+  userId         String
+  specialization CraftingSpecialization
+  level          Int                    @default(1)
+  experience     Int                    @default(0)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, specialization])
+}
+
+// Added for recipe discovery
+model UserDiscoveredRecipe {
+  id        String   @id @default(uuid())
+  userId    String
+  recipeId  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe CraftingRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, recipeId])
+}
+
+// Added for recipe discovery
+model RecipeItem {
+  id          String   @id @default(uuid())
+  recipeId    String   @unique
+  itemId      String
+  probability Float    @default(0.1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  recipe CraftingRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  item   Item           @relation(fields: [itemId], references: [id])
+}
+
+// Added for item salvaging
+model SalvageComponent {
+  id              String   @id @default(uuid())
+  sourceItemId    String
+  componentItemId String
+  minQuantity     Int      @default(1)
+  maxQuantity     Int      @default(1)
+  probability     Float    @default(1.0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+
+  // Relations
+  sourceItem    Item @relation("SourceItem", fields: [sourceItemId], references: [id])
+  componentItem Item @relation("ComponentItem", fields: [componentItemId], references: [id])
+
+  @@index([sourceItemId])
+}
+
+// Added for prestige system
+model PrestigePerk {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  cost        Int
+  effect      String // JSON string with perk effects
+  maxLevel    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  userPerks UserPrestigePerk[]
+}
+
+model UserPrestigePerk {
+  id             String   @id @default(uuid())
+  userId         String
+  prestigePerkId String
+  level          Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prestigePerk PrestigePerk @relation(fields: [prestigePerkId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, prestigePerkId])
+}
+
+// Added for skill trees
+model SkillTree {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  type        SkillTreeType
+  description String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @default(now())
+
+  // Relations
+  nodes SkillNode[]
+}
+
+model SkillNode {
+  id             String   @id @default(uuid())
+  skillTreeId    String
+  name           String
+  description    String
+  xPosition      Int
+  yPosition      Int
+  requiredPoints Int      @default(1)
+  requiredLevel  Int      @default(1)
+  effect         String // JSON string with node effects
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now())
+
+  // Relations
+  skillTree   SkillTree             @relation(fields: [skillTreeId], references: [id], onDelete: Cascade)
+  userNodes   UserSkillNode[]
+  parentNodes SkillNodeDependency[] @relation("ChildNode")
+  childNodes  SkillNodeDependency[] @relation("ParentNode")
+
+  @@unique([skillTreeId, name])
+}
+
+model SkillNodeDependency {
+  id           String @id @default(uuid())
+  parentNodeId String
+  childNodeId  String
+
+  // Relations
+  parentNode SkillNode @relation("ParentNode", fields: [parentNodeId], references: [id], onDelete: Cascade)
+  childNode  SkillNode @relation("ChildNode", fields: [childNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([parentNodeId, childNodeId])
+}
+
+model UserSkillNode {
+  id          String   @id @default(uuid())
+  userId      String
+  skillNodeId String
+  level       Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillNode SkillNode @relation(fields: [skillNodeId], references: [id])
+
+  @@unique([userId, skillNodeId])
+}
+
+// Added for equipment enhancement
+model EnhancementType {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  description   String
+  statType      String // DAMAGE, DURABILITY, EFFICIENCY, etc.
+  maxLevel      Int      @default(5)
+  baseBonus     Float
+  bonusPerLevel Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now())
+
+  // Relations
+  requirements     EnhancementMaterial[]
+  userEnhancements UserEquipmentEnhancement[]
+}
+
+model EnhancementMaterial {
+  id                String   @id @default(uuid())
+  enhancementTypeId String
+  level             Int
+  itemId            String
+  quantity          Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now())
+
+  // Relations
+  enhancementType EnhancementType @relation(fields: [enhancementTypeId], references: [id], onDelete: Cascade)
+  item            Item            @relation(fields: [itemId], references: [id])
+
+  @@unique([enhancementTypeId, level, itemId])
+}
+
+model UserEquipmentEnhancement {
+  id                 String   @id @default(uuid())
+  userId             String
+  userItemInstanceId String   @unique
+  enhancementTypeId  String
+  level              Int      @default(1)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @default(now())
+
+  // Relations
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userItemInstance UserItemInstance @relation(fields: [userItemInstanceId], references: [id], onDelete: Cascade)
+  enhancementType  EnhancementType  @relation(fields: [enhancementTypeId], references: [id])
+
+  @@unique([userItemInstanceId, enhancementTypeId])
+}
+
+// Added for titles and badges
+model Title {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String
+  rarity      TitleRarity @default(COMMON)
+  requirement String // JSON string with requirements 
+  statBonus   String? // JSON string with any stat bonuses
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now())
+
+  // Relations
+  userTitles UserTitle[]
+}
+
+model Badge {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  imageUrl    String?
+  requirement String // JSON string with requirements
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  // Relations
+  userBadges UserBadge[]
+}
+
+model UserTitle {
+  id         String   @id @default(uuid())
+  userId     String
+  titleId    String
+  obtainedAt DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title Title @relation(fields: [titleId], references: [id])
+
+  @@unique([userId, titleId])
+}
+
+model UserBadge {
+  id         String   @id @default(uuid())
+  userId     String
+  badgeId    String
+  obtainedAt DateTime @default(now())
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+}
+
+// Added for XP multiplier events
+model XpMultiplierEvent {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  multiplier  Float    @default(1.0)
+  startTime   DateTime
+  endTime     DateTime
+  userIds     String?  // JSON string array of user IDs this applies to (optional)
+  zoneIds     String?  // JSON string array of zone IDs this applies to (optional)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startTime, endTime])
+}
