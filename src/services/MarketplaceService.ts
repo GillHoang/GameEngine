@@ -463,4 +463,71 @@ export class MarketplaceService implements IMarketplaceService {
       take: limit,
     });
   }
+
+  /**
+   * Clean up expired marketplace listings and return items to sellers
+   * @returns The number of expired listings that were processed
+   */
+  async cleanupExpiredListings(): Promise<number> {
+    try {
+      const currentDate = new Date();
+
+      // Find all listings that have been active for more than 7 days
+      const oldDate = new Date(currentDate);
+      oldDate.setDate(oldDate.getDate() - 7);
+
+      // Find all expired listings
+      const expiredListings = await this.db.marketListing.findMany({
+        where: {
+          status: "ACTIVE",
+          createdAt: {
+            lt: oldDate,
+          },
+        },
+        include: {
+          item: true,
+        },
+      });
+
+      if (expiredListings.length === 0) {
+        return 0;
+      }
+
+      // Process each expired listing
+      for (const listing of expiredListings) {
+        await this.db.$transaction(async (tx) => {
+          // Update listing status
+          await tx.marketListing.update({
+            where: { id: listing.id },
+            data: { status: "EXPIRED" },
+          });
+
+          // Return items to seller
+          await this.inventoryService.addItem(
+            listing.sellerId,
+            listing.itemId,
+            listing.quantity
+          );
+
+          // Log the transaction
+          await tx.transaction.create({
+            data: {
+              senderId: listing.sellerId,
+              receiverId: listing.sellerId,
+              type: "LISTING_EXPIRED",
+              itemId: listing.itemId,
+              quantity: listing.quantity,
+              amount: 0,
+              description: `Expired listing returned: ${listing.quantity}x ${listing.item.name}`,
+            },
+          });
+        });
+      }
+
+      return expiredListings.length;
+    } catch (error) {
+      console.error("Error cleaning up expired listings:", error);
+      return 0;
+    }
+  }
 }

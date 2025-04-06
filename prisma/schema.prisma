@@ -45,6 +45,7 @@ enum TransactionType {
   ADMIN_ACTION
   MILESTONE_REWARD
   SALVAGE // Added for item salvaging
+  LISTING_EXPIRED
 }
 
 enum RewardType {
@@ -111,7 +112,7 @@ model User {
   activeBadge String?
 
   // Relations
-  inventory               InventorySlot[]
+  inventory               InventorySlot[] 
   userItemInstances       UserItemInstance[]
   userSkills              UserSkill[]
   userQuestProgress       UserQuestProgress[]
@@ -794,4 +795,17 @@ model XpMultiplierEvent {
   updatedAt   DateTime @updatedAt
 
   @@index([startTime, endTime])
+}
+
+// Added for game metrics and analytics
+model GameMetric {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  data      String?  // JSON string for flexible data storage
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
 }

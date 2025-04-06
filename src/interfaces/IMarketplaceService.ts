@@ -52,4 +52,7 @@ export interface IMarketplaceService {
   searchListings(searchTerm: string, options?: SearchOptions): Promise<MarketListingWithDetails[]>;
   getListingsBySeller(sellerId: string): Promise<MarketListingWithDetails[]>;
   getRecentTransactions(userId: string, limit?: number): Promise<Transaction[]>;
+
+  // Maintenance operations
+  cleanupExpiredListings(): Promise<number>;
 }
